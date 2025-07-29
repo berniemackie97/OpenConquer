@@ -74,8 +74,8 @@ OpenConquer.sln
 ### Phase 2 – Account & Character Services
 
 * \[✅] **Domain**: define `IAccountService`, `ICharacterService`, domain events
-* [ ] **Infrastructure**: implement account auth, session management, char CRUD
-* [ ] EF Core migrations: `Account` & `Character` entities
+* \[✏️] **Infrastructure**: implement account auth, session management, char CRUD
+* \[✏️] EF Core migrations: `Account` & `Character` entities
 
 ### Phase 3 – World Simulation
 
