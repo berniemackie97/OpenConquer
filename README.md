@@ -67,13 +67,13 @@ OpenConquer.sln
 
 ### Phase 1 – Protocol & Networking
 
-* [ ] **OpenConquer.Protocol**: packet definitions, crypto (seed/XOR/RSA)
-* [ ] **OpenConquer.Infrastructure**: TCP listener, pipelines, seed handshake → `Channel<Packet>`
-* [ ] Protocol compliance tests (seed → response, login handshake)
+* \[✅] **OpenConquer.Protocol**: packet definitions, crypto (seed/XOR/RSA)
+* \[✅] **OpenConquer.Infrastructure**: TCP listener, pipelines, seed handshake → `Channel<Packet>`
+* \[✅] Protocol compliance tests (seed → response, login handshake)
 
 ### Phase 2 – Account & Character Services
 
-* [ ] **Domain**: define `IAccountService`, `ICharacterService`, domain events
+* \[✅] **Domain**: define `IAccountService`, `ICharacterService`, domain events
 * [ ] **Infrastructure**: implement account auth, session management, char CRUD
 * [ ] EF Core migrations: `Account` & `Character` entities
 
