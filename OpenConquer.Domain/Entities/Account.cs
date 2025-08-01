@@ -1,14 +1,13 @@
-﻿using OpenConquer.Domain.Entities.Interface;
-using OpenConquer.Domain.Enums;
+﻿using OpenConquer.Domain.Enums;
 
 namespace OpenConquer.Domain.Entities
 {
-    public class Account : IAccount
+    public class Account
     {
         public uint UID { get; set; }
         public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
-        public string EMail { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
         public string Question { get; set; } = string.Empty;
         public string Answer { get; set; } = string.Empty;
         public PlayerPermission Permission { get; set; }

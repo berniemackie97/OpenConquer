@@ -1,110 +1,132 @@
 ﻿using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Options;
 using OpenConquer.Domain.Contracts;
+using OpenConquer.Domain.Entities;
 using OpenConquer.Domain.Enums;
-using OpenConquer.Protocol.Implementation.Crypto;
+using OpenConquer.Infrastructure.POCO;
+using OpenConquer.Protocol.Crypto;
 using OpenConquer.Protocol.Packets;
 using OpenConquer.Protocol.Packets.Auth;
 
 namespace OpenConquer.AccountServer.Session
 {
-    public class LoginClientSession(
-        TcpClient tcpClient,
-        IAccountService accountService,
-        ILoginKeyProvider keyProvider,
-        ILogger<LoginClientSession> logger)
+    public class LoginClientSession(TcpClient tcpClient, IAccountService accounts, ILoginKeyProvider keyProvider, ILogger<LoginClientSession> logger, ILogger<ConnectionContext> ctxLogger, IOptions<NetworkSettings> settings)
     {
-        private readonly ConnectionContext _ctx = new(tcpClient);
-        private readonly IAccountService _accountService = accountService;
+        private const int HeaderSize = 4;
+        private const int MinPacketSize = 4;
+        private const int MaxPacketSize = 1024;
+
+        private readonly ConnectionContext _ctx = new(tcpClient, ctxLogger);
+        private readonly IAccountService _accounts = accounts;
         private readonly ILoginKeyProvider _keyProvider = keyProvider;
         private readonly ILogger<LoginClientSession> _logger = logger;
+        private readonly int _gamePort = settings.Value.GamePort;
+        private readonly string _externalIp = settings.Value.ExternalIp;
 
         public async Task HandleHandshakeAsync(CancellationToken ct)
         {
-            var endpoint = _ctx.TcpClient.Client.RemoteEndPoint;
-            _logger.LogInformation("Client connected from {Endpoint}", endpoint);
+            System.Net.EndPoint? endpoint = _ctx.TcpClient.Client.RemoteEndPoint;
+            _logger.LogInformation("Starting handshake for {Endpoint}", endpoint);
 
-            // ─── Step 1A: build & send the 8‑byte seed ───
-            uint seed = (uint)RandomNumberGenerator.GetInt32(100_000, 90_000_000);
-            var seedPacket = new SeedResponsePacket(seed);
-            byte[] seedBytes = seedPacket.Serialize(); // 8 bytes
+            try
+            {
+                uint seed = SendSeed(ct);
+                (ushort pktLen, ushort pktId, byte[] fullPacket) = await ReadAndDecryptRequestAsync(ct);
+                _logger.LogInformation("Received login request (Len={Len} Id={Id})", pktLen, pktId);
 
-            // encrypt in‑place
-            _ctx.Cipher.Encrypt(seedBytes, seedBytes.Length);
-            await _ctx.SendAsync(seedBytes, seedBytes.Length, ct);
-            _logger.LogInformation("Sent encrypted SeedResponsePacket(Seed={Seed})", seed);
+                LoginRequestPacket req = LoginRequestPacket.Parse(fullPacket);
+                _logger.LogInformation("Parsed LoginRequest for {User}", req.Username);
 
-            // ─── Steps 1C–D: read & peek the next encrypted header ───
-            byte[] headerEnc = new byte[4];
+                await RespondAsync(req, seed);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Handshake canceled for {Endpoint}", endpoint);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Handshake failed for {Endpoint}", endpoint);
+            }
+            finally
+            {
+                await _ctx.DisconnectAsync();
+            }
+        }
+
+        private uint SendSeed(CancellationToken ct)
+        {
+            const int MinSeed = 100_000, MaxSeed = 90_000_000;
+            uint seed = (uint)RandomNumberGenerator.GetInt32(MinSeed, MaxSeed);
+            SeedResponsePacket packet = new(seed);
+            byte[] data = PacketWriter.Serialize(packet);
+
+            _ctx.Cipher.Encrypt(data, data.Length);
+            _ctx.SendPacketAsync(data, data.Length).AsTask().Wait(ct);
+
+            _logger.LogInformation("SeedResponsePacket sent (Seed={Seed})", seed);
+            return seed;
+        }
+
+        private async Task<(ushort Len, ushort Id, byte[] Full)> ReadAndDecryptRequestAsync(CancellationToken ct)
+        {
+            byte[] headerEnc = new byte[HeaderSize];
             if (!await ReadExactAsync(headerEnc, ct))
             {
-                _logger.LogWarning("Failed to read handshake header");
-                await _ctx.DisconnectAsync();
-                return;
+                throw new IOException("Failed to read header");
             }
 
-            // peek length with throw‑away cipher
-            var headerPeek = (byte[])headerEnc.Clone();
-            new LoginCipher().Decrypt(headerPeek, headerPeek.Length);
+            byte[] peek = (byte[])headerEnc.Clone();
+            new LoginCipher().Decrypt(peek, peek.Length);
 
-            ushort pktLen = BitConverter.ToUInt16(headerPeek, 0);
-            ushort pktId = BitConverter.ToUInt16(headerPeek, 2);
-            _logger.LogInformation("Handshake packet length={Length}, id={Id}", pktLen, pktId);
+            ushort len = BitConverter.ToUInt16(peek, 0);
+            ushort id = BitConverter.ToUInt16(peek, 2);
 
-            if (pktLen < 4 || pktLen > 1024)
+            if (len < MinPacketSize || len > MaxPacketSize)
             {
-                _logger.LogWarning("Invalid packet length {Length}", pktLen);
-                await _ctx.DisconnectAsync();
-                return;
+                throw new InvalidDataException($"Invalid packet length {len}");
             }
 
-            // ─── Step 1D: read the rest, decrypt full packet ───
-            int bodyLen = pktLen - 4;
+            int bodyLen = len - HeaderSize;
             byte[] bodyEnc = new byte[bodyLen];
             if (!await ReadExactAsync(bodyEnc, ct))
             {
-                _logger.LogWarning("Failed to read handshake body");
-                await _ctx.DisconnectAsync();
-                return;
+                throw new IOException("Failed to read body");
             }
 
-            var fullEnc = new byte[pktLen];
-            Buffer.BlockCopy(headerEnc, 0, fullEnc, 0, 4);
-            Buffer.BlockCopy(bodyEnc, 0, fullEnc, 4, bodyLen);
-            new LoginCipher().Decrypt(fullEnc, fullEnc.Length);
+            byte[] full = new byte[len];
+            Buffer.BlockCopy(headerEnc, 0, full, 0, HeaderSize);
+            Buffer.BlockCopy(bodyEnc, 0, full, HeaderSize, bodyLen);
+            new LoginCipher().Decrypt(full, full.Length);
 
-            // ─── Step 1E: parse & log the auth request ───
-            var req = LoginRequestPacket.Parse(fullEnc);
-            _logger.LogInformation(
-                "LoginRequest: PacketId={PacketId}, Username={User}",
-                req.PacketID, req.Username);
-
-            // ─── Step 1F: handle auth & reply ───
-            await ProcessLoginAsync(req, seed, ct);
+            return (len, id, full);
         }
 
-        private async Task ProcessLoginAsync(
-            LoginRequestPacket req,
-            uint seed,
-            CancellationToken ct)
+        private async Task RespondAsync(LoginRequestPacket req, uint seed)
         {
-            // — derive the RC5 key from the same seed we sent —
-            byte[] rc5Key = new byte[16];
-            var prng = new LoginPrng((int)seed);
-            for (int i = 0; i < rc5Key.Length; i++)
-                rc5Key[i] = (byte)prng.Next();
+            string password = DecryptPassword(req, seed);
+            AuthResponsePacket resp = await BuildResponseAsync(req.Username, password);
 
-            // — decrypt the password blob —
-            var crypt = new RC5Cipher(rc5Key);
-            byte[] decrypted = crypt.Decrypt(req.PasswordBlob);
-            string pass = Encoding.ASCII
-                .GetString(new ConquerPasswordCryptographer(req.Username)
-                .Decrypt(decrypted, decrypted.Length))
-                .TrimEnd('\0');
+            byte[] outBuf = PacketWriter.Serialize(resp);
+            await _ctx.SendPacketAsync(outBuf, outBuf.Length).ConfigureAwait(false);
 
-            // — apply the numpad->digit fix exactly as Albetros does —
-            var sb = new StringBuilder();
+            _logger.LogInformation("Sent AuthResponse (Key={Key}) for {User}", resp.Key, req.Username);
+        }
+
+        private static string DecryptPassword(LoginRequestPacket req, uint seed)
+        {
+            LoginPrng prng = new((int)seed);
+            byte[] rc5Key = Enumerable.Range(0, 16).Select(_ => (byte)prng.Next()).ToArray();
+            RC5Cipher rc5 = new(rc5Key);
+
+            byte[] decrypted = rc5.Decrypt(req.PasswordBlob);
+            byte[] chars = new ConquerPasswordCryptographer(req.Username)
+                                  .Decrypt(decrypted, decrypted.Length);
+
+            string pass = Encoding.ASCII.GetString(chars).TrimEnd('\0');
+
+            StringBuilder sb = new(pass.Length);
             foreach (char c in pass)
             {
                 sb.Append(c switch
@@ -122,57 +144,58 @@ namespace OpenConquer.AccountServer.Session
                     _ => c
                 });
             }
-            pass = sb.ToString();
+            return sb.ToString();
+        }
 
-            // ─── LOCAL TEST USER (skip DB) ───
-            if (req.Username.Equals("testuser", StringComparison.OrdinalIgnoreCase)
-             && pass == "testpass")
+        private async Task<AuthResponsePacket> BuildResponseAsync(string user, string pass)
+        {
+            if (user.Equals("testuser", StringComparison.OrdinalIgnoreCase) && pass == "testpass")
             {
-                var resp = new AuthResponsePacket
+                return new AuthResponsePacket
                 {
                     Key = AuthResponsePacket.RESPONSE_VALID,
                     UID = _keyProvider.NextKey(),
-                    Port = 5816,
-                    ExternalIp = "192.168.1.58"
+                    Port = (uint)_gamePort,
+                    ExternalIp = _externalIp
                 };
-
-                var outBuf = PacketWriter.Serialize(resp);
-                _ctx.Cipher.Encrypt(outBuf, outBuf.Length);
-                await _ctx.SendAsync(outBuf, outBuf.Length, ct);
-                return;
             }
 
-            // ─── FALL BACK TO DATABASE LOOKUP ───
-            var account = await _accountService.GetByUsernameAsync(req.Username);
-            var respDb = new AuthResponsePacket();
+            Account? acct = await _accounts.GetByUsernameAsync(user);
+            AuthResponsePacket resp = new();
 
-            if (account == null)
-                respDb.Key = AuthResponsePacket.RESPONSE_INVALID_ACCOUNT;
-            else if (pass != account.Password || account.Permission <= PlayerPermission.Error)
-                respDb.Key = AuthResponsePacket.RESPONSE_INVALID;
+            if (acct is null)
+            {
+                resp.Key = AuthResponsePacket.RESPONSE_INVALID_ACCOUNT;
+            }
+            else if (pass != acct.Password || acct.Permission == PlayerPermission.Error)
+            {
+                resp.Key = AuthResponsePacket.RESPONSE_INVALID;
+            }
             else
             {
-                respDb.Key = account.UID;
-                respDb.UID = _keyProvider.NextKey();
-                respDb.Port = 5816;
-                respDb.ExternalIp = "127.0.0.1";
-                account.Hash = respDb.UID;
-                account.AllowLogin();
+                resp.Key = acct.UID;
+                resp.UID = _keyProvider.NextKey();
+                resp.Port = (uint)_gamePort;
+                resp.ExternalIp = _externalIp;
+                acct.Hash = resp.UID;
+                acct.AllowLogin();
             }
 
-            var outBufDb = PacketWriter.Serialize(respDb);
-            _ctx.Cipher.Encrypt(outBufDb, outBufDb.Length);
-            await _ctx.SendAsync(outBufDb, outBufDb.Length, ct);
+            return resp;
         }
 
         private async Task<bool> ReadExactAsync(byte[] buf, CancellationToken ct)
         {
+            NetworkStream stream = _ctx.Stream;
             int offset = 0;
-            var stream = _ctx.Stream;
             while (offset < buf.Length)
             {
-                int n = await stream.ReadAsync(buf.AsMemory(offset), ct);
-                if (n == 0) return false;
+                int n = await stream.ReadAsync(buf.AsMemory(offset), ct).ConfigureAwait(false);
+                if (n == 0)
+                {
+                    return false;
+                }
+
                 offset += n;
             }
             return true;

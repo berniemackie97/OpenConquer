@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "OpenConquer.AccountServer\\OpenConquer.AccountServer.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "OpenConquer.GameServer\\OpenConquer.GameServer.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

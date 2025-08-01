@@ -1,72 +1,112 @@
 ﻿using System.Net.Sockets;
 using System.Text;
-using OpenConquer.GameServer.Crypto;
+using OpenConquer.Domain.Entities;
+using OpenConquer.GameServer.Dispatchers;
+using OpenConquer.GameServer.Session.Managers;
+using OpenConquer.Protocol.Crypto;
+using OpenConquer.Protocol.Packets;
+using OpenConquer.Protocol.Packets.Parsers;
 
 namespace OpenConquer.GameServer.Session
 {
-    /// <summary>
-    /// Handles the Conquer game‑port handshake and initial packet exchange.
-    /// </summary>
-    public class GameClientSession(TcpClient tcpClient, ILogger<GameClientSession> logger)
+    public class GameClientSession(TcpClient tcpClient, ILogger<GameClientSession> logger, PacketParserRegistry parser, PacketDispatcher dispatcher, WorldManager worldManager)
     {
         private readonly TcpClient _tcpClient = tcpClient;
         private readonly ILogger<GameClientSession> _logger = logger;
+        private readonly PacketParserRegistry _parser = parser;
+        private readonly PacketDispatcher _dispatcher = dispatcher;
 
-        // from Albetros.Common.GameKey
+        private NetworkStream? _stream;
+        private BlowfishCfb64Cipher? _cipher;
+
         private static readonly byte[] StaticKey = Encoding.ASCII.GetBytes("BC234xs45nme7HU9");
-
-        // handshake constants
         private const int PadLen = 11;
-        private const int JunkLen = 12;
         private static readonly byte[] ZeroIv = new byte[8];
+
+        public Character? Character { get; set; }
+
+        public WorldManager World { get; } = worldManager;
+
+        public Character User => Character ?? throw new InvalidOperationException("Character not yet loaded.");
+
+        public Task DisconnectAsync(CancellationToken ct)
+        {
+            _logger.LogInformation("Disconnecting client {Endpoint}", _tcpClient.Client.RemoteEndPoint);
+            try
+            {
+                _stream?.Close();
+                _tcpClient.Client.Shutdown(SocketShutdown.Both);
+            }
+            catch { /* swallow */ }
+            _tcpClient.Close();
+            return Task.CompletedTask;
+        }
 
         public async Task HandleGameHandshakeAsync(CancellationToken ct)
         {
-            System.Net.EndPoint? endpoint = _tcpClient.Client.RemoteEndPoint;
-            _logger.LogInformation("Game client connected from {Endpoint}", endpoint);
-
-            using NetworkStream stream = _tcpClient.GetStream();
+            _stream = _tcpClient.GetStream();
             _tcpClient.Client.NoDelay = true;
 
-            //
-            // ─── Step A: send server DH key packet ───
-            //
             DiffieHellmanKeyExchange dh = new();
-            byte[] serverBytes = dh.CreateServerKeyPacket();
-            _logger.LogInformation("Sending server DH key packet ({Length} bytes)", serverBytes.Length);
-            await stream.WriteAsync(serverBytes, ct);
+            byte[] serverKeyPacket = dh.CreateServerKeyPacket();
+            _logger.LogInformation("Sending server DH key packet ({Length} bytes)", serverKeyPacket.Length);
+            await _stream.WriteAsync(serverKeyPacket, ct);
 
-            //
-            // ─── Step B: receive & decrypt client key blob ───
-            //
-            BlowfishCfb64Cipher liveCipher = new();
-            liveCipher.SetKey(StaticKey);
-            liveCipher.SetIvs(ZeroIv, ZeroIv);
+            _cipher = new BlowfishCfb64Cipher();
+            _cipher.SetKey(StaticKey);
+            _cipher.SetIvs(ZeroIv, ZeroIv);
 
-            // 1) peek total length
-            int totalLen = await PeekEncryptedLengthAsync(stream, PadLen, ct);
+            int totalLen = await PeekEncryptedLengthAsync(_stream, PadLen, ct);
+            byte[] dhBlob = await ReadAndDecryptAsync(_stream, _cipher, totalLen, ct);
 
-            // 2) read & decrypt the entire DH blob
-            byte[] dhBlob = await ReadAndDecryptAsync(stream, liveCipher, totalLen, ct);
-
-            // 3) extract client DH public‑key hex
             string clientPubHex = ParseClientDhPublicKey(dhBlob);
             _logger.LogInformation("Received client DH public key (hex, {Length} chars)", clientPubHex.Length);
 
-            // 4) switch to DH‑derived Blowfish
-            liveCipher = dh.HandleClientKeyPacket(clientPubHex, liveCipher);
-            _logger.LogInformation("DH handshake complete; switched to shared‑secret cipher");
+            _cipher = dh.HandleClientKeyPacket(clientPubHex, _cipher);
+            _logger.LogInformation("DH handshake complete; switched to shared‐secret cipher");
 
-            //
-            // ─── Steps C–F ─── …next: login header/body, parse GameLoginRequestPacket,
-            // build & encrypt your WorldListPacket, etc.
-            //
+            await ProcessIncomingPacketsAsync(ct);
         }
 
-        /// <summary>
-        /// Reads PadLen+4 bytes, temporarily decrypts them to get the 'remaining' length,
-        /// and returns the total packet length (pad + remaining).
-        /// </summary>
+        private async Task ProcessIncomingPacketsAsync(CancellationToken ct)
+        {
+            if (_stream is null || _cipher is null)
+            {
+                throw new InvalidOperationException("Handshake not completed.");
+            }
+
+            while (!ct.IsCancellationRequested)
+            {
+                int totalLen = await PeekEncryptedLengthAsync(_stream, PadLen, ct);
+                byte[] encrypted = new byte[totalLen];
+                if (!await ReadExactAsync(_stream, encrypted, totalLen, ct))
+                {
+                    break; // client disconnected
+                }
+
+                _cipher.Decrypt(encrypted);
+                IPacket packet = _parser.ParsePacket(encrypted);
+                await _dispatcher.DispatchAsync(packet, this, ct);
+            }
+        }
+
+        public Task SendAsync<TPacket>(TPacket packet, CancellationToken ct)
+        {
+            if (_stream is null || _cipher is null)
+            {
+                throw new InvalidOperationException("Cannot send before handshake.");
+            }
+
+            byte[] buffer = packet switch
+            {
+                byte[] b => b,
+                _ => (byte[])(object)packet!
+            };
+
+            _cipher.Encrypt(buffer);
+            return _stream.WriteAsync(buffer.AsMemory(0, buffer.Length), ct).AsTask();
+        }
+
         private static async Task<int> PeekEncryptedLengthAsync(NetworkStream stream, int padLen, CancellationToken ct)
         {
             byte[] headerEnc = new byte[padLen + 4];
@@ -75,19 +115,15 @@ namespace OpenConquer.GameServer.Session
                 throw new IOException("Failed reading encrypted header");
             }
 
-            // throw‐away cipher so we don't advance the real cipher’s IVs
-            BlowfishCfb64Cipher peekCipher = new();
-            peekCipher.SetKey(StaticKey);
-            peekCipher.SetIvs(ZeroIv, ZeroIv);
-            peekCipher.Decrypt(headerEnc);
+            BlowfishCfb64Cipher peek = new();
+            peek.SetKey(StaticKey);
+            peek.SetIvs(ZeroIv, ZeroIv);
+            peek.Decrypt(headerEnc);
 
             uint remaining = BitConverter.ToUInt32(headerEnc, padLen);
-            return (int)(padLen + remaining);
+            return padLen + (int)remaining;
         }
 
-        /// <summary>
-        /// Reads exactly 'totalLen' bytes from the stream and decrypts them in one shot.
-        /// </summary>
         private static async Task<byte[]> ReadAndDecryptAsync(NetworkStream stream, BlowfishCfb64Cipher cipher, int totalLen, CancellationToken ct)
         {
             byte[] fullEnc = new byte[totalLen];
@@ -100,13 +136,10 @@ namespace OpenConquer.GameServer.Session
             return fullEnc;
         }
 
-        /// <summary>
-        /// Parses out the ASCII client‑public‑key hex from a decrypted DH blob.
-        /// </summary>
         private static string ParseClientDhPublicKey(byte[] blob)
         {
             int pos = PadLen;
-            pos += 4; // skip remaining‑length
+            pos += 4;
             int junkLen = (int)BitConverter.ToUInt32(blob, pos);
             pos += 4 + junkLen;
             int ciLen = (int)BitConverter.ToUInt32(blob, pos);
@@ -119,7 +152,6 @@ namespace OpenConquer.GameServer.Session
             pos += 4 + gLen;
             int pubLen = (int)BitConverter.ToUInt32(blob, pos);
             pos += 4;
-
             return Encoding.ASCII.GetString(blob, pos, pubLen);
         }
 

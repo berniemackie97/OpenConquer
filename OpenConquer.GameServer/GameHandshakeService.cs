@@ -1,14 +1,16 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using Microsoft.Extensions.Options;
 using OpenConquer.GameServer.Queues;
+using OpenConquer.Infrastructure.POCO;
 
 namespace OpenConquer.GameServer
 {
-    public class GameHandshakeService(ILogger<GameHandshakeService> logger, ConnectionQueue queue, IConfiguration config) : BackgroundService
+    public class GameHandshakeService(ILogger<GameHandshakeService> logger, ConnectionQueue queue, IOptions<NetworkSettings> netConfig) : BackgroundService
     {
         private readonly ILogger<GameHandshakeService> _logger = logger;
         private readonly ConnectionQueue _queue = queue;
-        private readonly int _gamePort = config.GetValue<int>("GamePort");
+        private readonly int _gamePort = netConfig.Value.GamePort;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -22,12 +24,14 @@ namespace OpenConquer.GameServer
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
-                    _logger.LogInformation("Accepted game connection from {Endpoint}",
-                                           client.Client.RemoteEndPoint);
+                    _logger.LogInformation("Accepted game connection from {Endpoint}", client.Client.RemoteEndPoint);
                     await _queue.EnqueueAsync(client, stoppingToken);
                 }
             }
-            catch (OperationCanceledException) { /* shutting down */ }
+            catch (OperationCanceledException) 
+            {
+                // Shutdown
+            }
             finally
             {
                 listener.Stop();

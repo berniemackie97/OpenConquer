@@ -1,21 +1,37 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-OpenConquer.AccountServer-174b4684-2fb0-4af1-9842-023a341eb707</UserSecretsId>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>dotnet-OpenConquer.AccountServer-174b4684-2fb0-4af1-9842-023a341eb707</UserSecretsId>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Mapster" Version="7.4.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.3" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="appsettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 
-  <ItemGroup>
-    <ProjectReference Include="..\OpenConquer.Domain\OpenConquer.Domain.csproj" />
-    <ProjectReference Include="..\OpenConquer.Infrastructure\OpenConquer.Infrastructure.csproj" />
-    <ProjectReference Include="..\OpenConquer.Protocol\OpenConquer.Protocol.csproj" />
-  </ItemGroup>
+		<None Include="$(MSBuildThisFileDirectory)..\appsettings.shared.json">
+			<Link>appsettings.shared.json</Link>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Mapster" Version="7.4.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.13">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
+		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\OpenConquer.Domain\OpenConquer.Domain.csproj" />
+		<ProjectReference Include="..\OpenConquer.Infrastructure\OpenConquer.Infrastructure.csproj" />
+		<ProjectReference Include="..\OpenConquer.Protocol\OpenConquer.Protocol.csproj" />
+	</ItemGroup>
+
 </Project>

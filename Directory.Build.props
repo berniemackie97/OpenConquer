@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)appsettings.shared.json">
+      <Link>appsettings.shared.json</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>
