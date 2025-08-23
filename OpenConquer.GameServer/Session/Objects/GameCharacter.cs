@@ -45,6 +45,7 @@ namespace OpenConquer.GameServer.Session.Objects
             await Session.SendAsync(PlayerInfoPacket.Create(Domain), ct);
             await Session.SendAsync(DataPacket.CreateEnterMap(UID, MapID, X, Y), ct);
             await Session.SendAsync(DateTimePacket.Create(), ct);
+            await InitializeSpawnsAsync(ct);
         }
 
         public void AddEffect1(Effect1 type, int durationMs)
@@ -89,6 +90,18 @@ namespace OpenConquer.GameServer.Session.Objects
 
             _ = Session.SendAsync(new StatusUpdatePacket(UID, flags), CancellationToken.None);
             _ = Session.BroadcastToNearby(new StatusUpdatePacket(UID, flags));
+        }
+
+        private async Task InitializeSpawnsAsync(CancellationToken ct)
+        {
+            IEnumerable<GameCharacter> others = Session.World.GetPlayersInMap(MapID).Where(pc => pc.UID != UID);
+            foreach (GameCharacter? other in others)
+            {
+                await Session.SendAsync(SpawnPlayerPacket.Create(other.Domain), ct);
+            }
+
+            SpawnPlayerPacket mySpawnPacket = SpawnPlayerPacket.Create(Domain);
+            await Session.BroadcastToNearby(mySpawnPacket);
         }
     }
 

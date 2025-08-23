@@ -43,7 +43,7 @@ namespace OpenConquer.Protocol.Packets
                 throw new InvalidOperationException($"Not a {nameof(CreatePlayerPacket)}");
             }
 
-            PacketReader reader = new PacketReader(buffer.Slice(6));
+            PacketReader reader = new(buffer[6..]);
             uint u1 = reader.ReadUInt32();
             uint u2 = reader.ReadUInt32();
             uint u3 = reader.ReadUInt32();

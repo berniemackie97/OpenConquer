@@ -14,5 +14,6 @@ namespace OpenConquer.Infrastructure.Models
         public PlayerPermission Permission { get; set; }
         public uint Hash { get; set; }
         public uint Timestamp { get; set; }
+        public CharacterEntity Character { get; set; } = null!;
     }
 }

@@ -35,7 +35,7 @@ namespace OpenConquer.Protocol.Extensions
             for (int i = 0; i < packer.Count; i++)
             {
                 string s = packer.GetString(i) ?? "";
-                byte[] bytes = Encoding.Default.GetBytes(s);
+                byte[] bytes = Encoding.ASCII.GetBytes(s);
 
                 span[offs++] = (byte)bytes.Length;
                 bytes.CopyTo(span.Slice(offs, bytes.Length));

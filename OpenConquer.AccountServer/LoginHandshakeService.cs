@@ -9,64 +9,56 @@ namespace OpenConquer.AccountServer
     public class LoginHandshakeService : BackgroundService
     {
         private readonly ILogger<LoginHandshakeService> _logger;
-        private readonly ConnectionQueue _queue;
+        private readonly IServiceProvider _services;
         private readonly TcpListener _listener;
         private readonly int _port;
+        private readonly ConnectionQueue _queue;
 
-        public LoginHandshakeService(ILogger<LoginHandshakeService> logger, ConnectionQueue queue, IOptions<NetworkSettings> netConfigs)
+        public LoginHandshakeService(ILogger<LoginHandshakeService> logger, IServiceProvider services, IOptions<NetworkSettings> netConfigs, ConnectionQueue queue)
         {
-            _logger = logger;
-            _queue = queue;
-            _port = netConfigs.Value.LoginPort;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _services = services ?? throw new ArgumentNullException(nameof(services));
+            _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+            _port = netConfigs?.Value.LoginPort ?? throw new ArgumentNullException(nameof(netConfigs));
             _listener = new TcpListener(IPAddress.Any, _port);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            StartListener();
-            _logger.LogInformation("LoginHandshakeService is listening on port {Port}", _port);
-
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                try
+                _listener.Start();
+                _logger.LogInformation("LoginHandshakeService listening on port {Port}", _port);
+
+                while (!stoppingToken.IsCancellationRequested)
                 {
-                    TcpClient client = await _listener.AcceptTcpClientAsync(stoppingToken);
+                    TcpClient client;
+                    try
+                    {
+                        client = await _listener.AcceptTcpClientAsync(stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+
                     EndPoint? endpoint = client.Client.RemoteEndPoint;
                     _logger.LogInformation("Accepted login connection from {Endpoint}", endpoint);
 
-                    await _queue.EnqueueAsync(client, stoppingToken);
+                    await _queue.EnqueueAsync(client, stoppingToken).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException)
-                {
-                    _logger.LogInformation("LoginHandshakeService cancellation requested.");
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to accept incoming login connection");
-                }
+            }
+            finally
+            {
+                _listener.Stop();
+                _logger.LogInformation("LoginHandshakeService stopped listening on port {Port}", _port);
             }
         }
 
         public override void Dispose()
         {
-            _logger.LogInformation("Stopping LoginHandshakeService listener on port {Port}", _port);
             _listener.Stop();
             base.Dispose();
-            GC.SuppressFinalize(this);
-        }
-
-        private void StartListener()
-        {
-            try
-            {
-                _listener.Start();
-            }
-            catch (SocketException ex)
-            {
-                _logger.LogError(ex, "Unable to start TCP listener on port {Port}", _port);
-                throw;
-            }
         }
     }
 }

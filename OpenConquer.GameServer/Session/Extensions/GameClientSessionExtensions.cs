@@ -1,5 +1,4 @@
 ﻿using OpenConquer.GameServer.Session.Managers;
-using OpenConquer.GameServer.Session.Objects;
 using OpenConquer.Protocol.Packets;
 
 namespace OpenConquer.GameServer.Session.Extensions
@@ -9,8 +8,7 @@ namespace OpenConquer.GameServer.Session.Extensions
         public static Task BroadcastToNearby(this GameClientSession session, IPacket packet, int range = 20)
         {
             WorldManager wm = session.World;
-            GameCharacter? self = wm.GetPlayer(session.User.UID);
-            if (self != null)
+            if (wm.GetPlayer(session.User.UID) is { } self)
             {
                 wm.BroadcastToNearby(self, packet, range);
             }

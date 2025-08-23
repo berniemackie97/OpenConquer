@@ -13,7 +13,7 @@ namespace OpenConquer.Domain.Entities
         public PlayerPermission Permission { get; set; }
         public uint Hash { get; set; }
         public uint Timestamp { get; set; }
-
+        public Character Character { get; set; } = null!;
         public void AllowLogin(bool updateTimestamp = true)
         {
             if (updateTimestamp)

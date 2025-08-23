@@ -2,7 +2,9 @@
 {
     public interface IPacketCipher
     {
-        void Encrypt(byte[] buffer, int length);
-        void Decrypt(byte[] buffer, int length);
+        void GenerateKeys(object[] seeds);
+        void Decrypt(Span<byte> src, Span<byte> dst);
+        void Encrypt(Span<byte> src, Span<byte> dst);
+
     }
 }

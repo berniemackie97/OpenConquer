@@ -40,20 +40,21 @@ namespace OpenConquer.AccountServer.Workers
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
         {
+            string remoteEndPoint = client.Client?.RemoteEndPoint?.ToString() ?? "UNKNOWN";
             using IServiceScope scope = _services.CreateScope();
             try
             {
                 LoginClientSession session = ActivatorUtilities.CreateInstance<LoginClientSession>(scope.ServiceProvider, client);
 
-                _logger.LogInformation("Beginning handshake for {RemoteEndPoint}", client.Client.RemoteEndPoint);
+                _logger.LogInformation("Beginning handshake for {RemoteEndPoint}", remoteEndPoint);
 
                 await session.HandleHandshakeAsync(ct).ConfigureAwait(false);
 
-                _logger.LogInformation("Completed handshake for {RemoteEndPoint}", client.Client.RemoteEndPoint);
+                _logger.LogInformation("Completed handshake for {RemoteEndPoint}", remoteEndPoint);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Exception handling client {RemoteEndPoint}", client.Client.RemoteEndPoint);
+                _logger.LogError(ex, "Exception handling client {RemoteEndPoint}", remoteEndPoint);
             }
             finally
             {
@@ -64,7 +65,7 @@ namespace OpenConquer.AccountServer.Workers
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Error disposing client {RemoteEndPoint}", client.Client.RemoteEndPoint);
+                    _logger.LogWarning(ex, "Error disposing client {RemoteEndPoint}", remoteEndPoint);
                 }
             }
         }

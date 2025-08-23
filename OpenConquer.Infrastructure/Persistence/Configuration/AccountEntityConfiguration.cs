@@ -16,7 +16,7 @@ namespace OpenConquer.Infrastructure.Persistence.Configuration
             builder.Property(a => a.Password).HasColumnName("password");
             builder.Property(a => a.Question).HasColumnName("question");
             builder.Property(a => a.Answer).HasColumnName("answer");
-            builder.Property(a => a.Permission).HasColumnName("permission");
+            builder.Property(a => a.Permission).HasColumnName("permission").HasColumnType("int unsigned").HasConversion<uint>().IsRequired();
             builder.Property(a => a.Hash).HasColumnName("hash");
             builder.Property(a => a.Timestamp).HasColumnName("timestamp");
         }

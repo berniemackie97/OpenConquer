@@ -7,9 +7,9 @@ using OpenConquer.Infrastructure.Persistence.Context;
 
 namespace OpenConquer.Infrastructure.Services
 {
-    public class CharacterService(GameDataContext gameDataContext) : ICharacterService
+    public class CharacterService(DataContext gameDataContext) : ICharacterService
     {
-        private readonly GameDataContext _gameDataContext = gameDataContext;
+        private readonly DataContext _gameDataContext = gameDataContext;
 
         public async Task<Character?> LoadAsync(uint uid, CancellationToken ct)
         {

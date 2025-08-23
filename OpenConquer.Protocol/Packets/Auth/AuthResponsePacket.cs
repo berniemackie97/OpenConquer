@@ -6,7 +6,7 @@ namespace OpenConquer.Protocol.Packets.Auth
 {
     public struct AuthResponsePacket : IPacket
     {
-        private const ushort PacketLength = 54;
+        private const ushort PacketLength = 36;
         private const ushort PacketTypeID = 1055;
         private const int ExternalIpLength = 16;
 
@@ -15,31 +15,27 @@ namespace OpenConquer.Protocol.Packets.Auth
         public const byte RESPONSE_BANNED = 12;
         public const byte RESPONSE_INVALID_ACCOUNT = 57;
 
-        private readonly ushort _size = PacketLength;
-        private readonly ushort _type = PacketTypeID;
-
         public uint UID { get; set; }
         public uint Key { get; set; }
         public uint Port { get; set; }
-        public uint Hash { get; set; }
+        public uint Hash { get; set; } = 0;
 
         public string ExternalIp { get; set; } = string.Empty;
 
-        public AuthResponsePacket()
-        {}
+        public AuthResponsePacket() { }
 
         public static AuthResponsePacket CreateInvalid() => new()
         {
             Key = RESPONSE_INVALID
         };
 
-        public readonly ushort PacketID => _type;
-        public readonly int Length => _size;
+        public readonly ushort PacketID => PacketTypeID;
+        public readonly int Length => PacketLength;
 
         public readonly void Write(IBufferWriter<byte> writer)
         {
-            writer.WriteUInt16LittleEndian(_size);
-            writer.WriteUInt16LittleEndian(_type);
+            writer.WriteUInt16LittleEndian(PacketLength);
+            writer.WriteUInt16LittleEndian(PacketTypeID);
 
             writer.WriteUInt32LittleEndian(UID);
             writer.WriteUInt32LittleEndian(Key);
@@ -47,6 +43,7 @@ namespace OpenConquer.Protocol.Packets.Auth
             writer.WriteUInt32LittleEndian(Hash);
 
             Span<byte> span = writer.GetSpan(ExternalIpLength);
+            span.Clear();
 
             if (!string.IsNullOrEmpty(ExternalIp))
             {
@@ -56,4 +53,5 @@ namespace OpenConquer.Protocol.Packets.Auth
             writer.Advance(ExternalIpLength);
         }
     }
+
 }

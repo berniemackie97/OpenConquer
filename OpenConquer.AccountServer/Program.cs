@@ -17,14 +17,15 @@ builder.Services.Configure<NetworkSettings>(builder.Configuration.GetSection("Ne
 
 string connString = builder.Configuration.GetConnectionString("Default") ?? throw new InvalidOperationException("Missing ConnectionStrings:Default");
 MySqlServerVersion serverVer = new(new Version(8, 0, 36));
-builder.Services.AddDbContext<AccountDataContext>(options => options.UseMySql(connString, serverVer));
+builder.Services.AddDbContext<DataContext>(options => options.UseMySql(connString, serverVer));
 
-builder.Services.AddSingleton<ConnectionQueue>();
 builder.Services.AddSingleton<ILoginKeyProvider, LockingLoginKeyProvider>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 
-builder.Services.AddHostedService<LoginHandshakeService>();
+builder.Services.AddSingleton<ConnectionQueue>();
 builder.Services.AddHostedService<ConnectionWorker>();
+
+builder.Services.AddHostedService<LoginHandshakeService>();
 
 MapsterConfig.RegisterMappings();
 

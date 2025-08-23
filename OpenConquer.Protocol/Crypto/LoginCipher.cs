@@ -1,4 +1,5 @@
-﻿using OpenConquer.Protocol.Packets;
+﻿using System;
+using OpenConquer.Protocol.Packets;
 
 namespace OpenConquer.Protocol.Crypto
 {
@@ -8,8 +9,8 @@ namespace OpenConquer.Protocol.Crypto
         {
             private ushort Counter = initial;
 
-            public readonly byte Key1 => (byte)(Counter & 0xFF);
-            public readonly byte Key2 => (byte)(Counter >> 8);
+            public byte Key1 => (byte)(Counter & 0xFF);
+            public byte Key2 => (byte)(Counter >> 8);
             public void Increment() => Counter++;
         }
 
@@ -44,26 +45,46 @@ namespace OpenConquer.Protocol.Crypto
             _decryptCounter = new CryptCounter(0);
         }
 
-        public void Encrypt(byte[] buffer, int length)
+        // IPacketCipher implementation
+
+        /// <summary>No key to derive for the login cipher.</summary>
+        public void GenerateKeys(object[] seeds)
         {
-            for (int i = 0; i < length; i++)
+            // no-op
+        }
+
+        /// <summary>Encrypt in-place src→dst.</summary>
+        public void Encrypt(Span<byte> src, Span<byte> dst)
+        {
+            if (dst.Length < src.Length) throw new ArgumentException("dst too small");
+            for (int i = 0; i < src.Length; i++)
             {
-                buffer[i] ^= 0xAB;
-                buffer[i] = (byte)(buffer[i] >> 4 | buffer[i] << 4);
-                buffer[i] ^= (byte)(CryptKey1[_encryptCounter.Key1] ^ CryptKey2[_encryptCounter.Key2]);
+                byte b = src[i];
+                b ^= 0xAB;
+                b = (byte)(b >> 4 | b << 4);
+                b ^= (byte)(CryptKey1[_encryptCounter.Key1] ^ CryptKey2[_encryptCounter.Key2]);
                 _encryptCounter.Increment();
+                dst[i] = b;
             }
         }
 
-        public void Decrypt(byte[] buffer, int length)
+        /// <summary>Decrypt in-place src→dst.</summary>
+        public void Decrypt(Span<byte> src, Span<byte> dst)
         {
-            for (int i = 0; i < length; i++)
+            if (dst.Length < src.Length) throw new ArgumentException("dst too small");
+            for (int i = 0; i < src.Length; i++)
             {
-                buffer[i] ^= 0xAB;
-                buffer[i] = (byte)(buffer[i] >> 4 | buffer[i] << 4);
-                buffer[i] ^= (byte)(CryptKey2[_decryptCounter.Key2] ^ CryptKey1[_decryptCounter.Key1]);
+                byte b = src[i];
+                b ^= 0xAB;
+                b = (byte)(b >> 4 | b << 4);
+                b ^= (byte)(CryptKey2[_decryptCounter.Key2] ^ CryptKey1[_decryptCounter.Key1]);
                 _decryptCounter.Increment();
+                dst[i] = b;
             }
         }
+
+        public void Encrypt(byte[] buffer, int length) => Encrypt(buffer.AsSpan(0, length), buffer.AsSpan(0, length));
+
+        public void Decrypt(byte[] buffer, int length) => Decrypt(buffer.AsSpan(0, length), buffer.AsSpan(0, length));
     }
 }

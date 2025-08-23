@@ -7,5 +7,11 @@ namespace OpenConquer.Domain.Contracts
     {
         Task<IEnumerable<LevelStat>> GetAllAsync(CancellationToken ct = default);
         Task<LevelStat?> GetAsync(Profession profession, byte level, CancellationToken ct = default);
+
+        Task<IEnumerable<ExperienceCurve>> GetAllCurvesAsync(CancellationToken ct = default);
+
+        Task<ulong> GetTotalExperienceForLevelAsync(byte level, CancellationToken ct = default);
+
+        Task<uint> GetProficiencyExperienceForTierAsync(byte tier, CancellationToken ct = default);
     }
 }

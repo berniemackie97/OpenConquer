@@ -6,6 +6,7 @@ namespace OpenConquer.Domain.Entities
     public class Character
     {
         public uint UID { get; set; }
+        public uint AccountUID { get; set; }
         public string Name { get; set; } = "";
         public string Spouse { get; set; } = "";
         public uint Mesh { get; set; }

@@ -42,20 +42,25 @@ namespace OpenConquer.GameServer.Workers
 
         private async Task HandleClientSessionAsync(TcpClient client, CancellationToken ct)
         {
+            string remoteEndPoint = client.Client?.RemoteEndPoint?.ToString() ?? "UNKNOWN";
             using IServiceScope scope = _services.CreateScope();
             try
             {
-                GameClientSession session = ActivatorUtilities.CreateInstance<GameClientSession>(scope.ServiceProvider, client);
+                ILogger<ConnectionContext> connLogger = scope.ServiceProvider.GetRequiredService<ILogger<ConnectionContext>>();
+                ConnectionContext context = new(client, connLogger);
+
+                GameClientSession session = ActivatorUtilities.CreateInstance<GameClientSession>(scope.ServiceProvider, context);
+
                 await session.HandleGameHandshakeAsync(ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during game client session for {Endpoint}", client.Client.RemoteEndPoint);
+                _logger.LogError(ex, "Error during game client session for {Endpoint}", remoteEndPoint);
             }
             finally
             {
                 client.Dispose();
-                _logger.LogInformation("Closed connection for {Endpoint}", client.Client.RemoteEndPoint);
+                _logger.LogInformation("Closed connection for {Endpoint}", remoteEndPoint);
             }
         }
     }

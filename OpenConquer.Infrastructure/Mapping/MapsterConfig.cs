@@ -10,6 +10,8 @@ namespace OpenConquer.Infrastructure.Mapping
         {
             TypeAdapterConfig<AccountEntity, Account>.NewConfig();
             TypeAdapterConfig<LevelStatEntity, LevelStat>.NewConfig();
+            TypeAdapterConfig<ExperienceCurveEntity, ExperienceCurve>.NewConfig();
+            TypeAdapterConfig<CharacterEntity, Character>.NewConfig();
         }
     }
 }

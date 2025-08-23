@@ -10,13 +10,10 @@ namespace OpenConquer.Infrastructure.Persistence.Configuration
         {
             builder.ToTable("LevelStats");
 
-            builder.HasKey(e => e.ID);
+            builder.HasKey(e => new { e.Profession, e.Level });
 
-            builder.HasIndex(e => new { e.Profession, e.Level }).IsUnique();
-
-            builder.Property(e => e.Profession).HasConversion<int>().IsRequired();
-
-            builder.Property(e => e.Level).HasColumnType("tinyint unsigned").IsRequired();
+            builder.Property(e => e.Profession).HasColumnName("profession").HasColumnType("tinyint unsigned").HasConversion<byte>().IsRequired();
+            builder.Property(e => e.Level).HasColumnName("level").HasColumnType("tinyint unsigned").IsRequired();
 
             builder.Property(e => e.Strength).IsRequired();
             builder.Property(e => e.Agility).IsRequired();

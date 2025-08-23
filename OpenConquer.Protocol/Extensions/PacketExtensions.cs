@@ -7,7 +7,7 @@ namespace OpenConquer.Protocol.Extensions
     {
         public static byte[] ToBytes(this IPacket packet)
         {
-            ArrayBufferWriter<byte> writer = new ArrayBufferWriter<byte>();
+            ArrayBufferWriter<byte> writer = new();
             packet.Write(writer);
             return writer.WrittenSpan.ToArray();
         }

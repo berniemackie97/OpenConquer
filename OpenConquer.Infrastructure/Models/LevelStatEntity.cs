@@ -4,8 +4,6 @@ namespace OpenConquer.Infrastructure.Models
 {
     public class LevelStatEntity
     {
-        public int ID { get; set; }
-
         public Profession Profession { get; set; }
         public byte Level { get; set; }
         public int Strength { get; set; }

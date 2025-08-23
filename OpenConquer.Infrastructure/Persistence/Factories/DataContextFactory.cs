@@ -5,20 +5,19 @@ using OpenConquer.Infrastructure.Persistence.Context;
 
 namespace OpenConquer.Infrastructure.Persistence.Factories
 {
-    public class AccountsContextFactory : IDesignTimeDbContextFactory<AccountDataContext>
+    public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
     {
-        public AccountDataContext CreateDbContext(string[] args)
+        public DataContext CreateDbContext(string[] args)
         {
             string basePath = AppContext.BaseDirectory;
             IConfigurationRoot config = new ConfigurationBuilder().SetBasePath(basePath).AddJsonFile("appsettings.shared.json", optional: false, reloadOnChange: true).AddEnvironmentVariables().Build();
 
-            string conn = config.GetConnectionString("Default") ?? throw new InvalidOperationException("No connection string");
+            string conn = config.GetConnectionString("Default") ?? throw new InvalidOperationException("No connection string 'Default'");
 
-            DbContextOptionsBuilder<AccountDataContext> optionsBuilder = new();
+            DbContextOptionsBuilder<DataContext> optionsBuilder = new();
             optionsBuilder.UseMySql(conn, new MySqlServerVersion(new Version(8, 0, 36)));
 
-            return new AccountDataContext(optionsBuilder.Options);
+            return new DataContext(optionsBuilder.Options);
         }
-
     }
 }

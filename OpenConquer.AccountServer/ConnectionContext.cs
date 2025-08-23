@@ -31,20 +31,6 @@ namespace OpenConquer.AccountServer
             _sendLoop = Task.Run(ProcessSendQueueAsync);
         }
 
-        public async ValueTask SendPacketAsync(byte[] buffer, int length)
-        {
-            ArgumentNullException.ThrowIfNull(buffer);
-            if ((uint)length > (uint)buffer.Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(length));
-            }
-
-            Cipher.Encrypt(buffer, length);
-
-            ArraySegment<byte> segment = new(buffer, 0, length);
-            await _sendQueue.Writer.WriteAsync(segment, _cts.Token).ConfigureAwait(false);
-        }
-
         public async Task DisconnectAsync()
         {
             _logger.LogInformation("Disconnecting client {RemoteEndPoint}", TcpClient.Client.RemoteEndPoint);
@@ -57,8 +43,7 @@ namespace OpenConquer.AccountServer
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error disposing TcpClient for {RemoteEndPoint}",
-                    TcpClient.Client.RemoteEndPoint);
+                _logger.LogWarning(ex, "Error disposing TcpClient for {RemoteEndPoint}", TcpClient.Client.RemoteEndPoint);
             }
 
             await _sendLoop.ConfigureAwait(false);

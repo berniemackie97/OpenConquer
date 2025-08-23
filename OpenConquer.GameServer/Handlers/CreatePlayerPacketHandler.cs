@@ -19,9 +19,9 @@ namespace OpenConquer.GameServer.Handlers
         //private static readonly int[] AllowedJobs = [10, 20, 40, 50, 60, 100];
 
         // Need to figure out what these should be
-        private const ushort DefaultMapId = 1;
-        private const ushort DefaultSpawnX = 100;
-        private const ushort DefaultSpawnY = 100;
+        private const ushort DefaultMapId = 1002;
+        private static readonly ushort[] DefaultSpawnX = [430, 423, 439, 428, 452, 464, 439];
+        private static readonly ushort[] DefaultSpawnY = [378, 394, 384, 365, 365, 378, 396];
 
         private readonly UserManager _userMgr = userMgr ?? throw new ArgumentNullException(nameof(userMgr));
         private readonly WorldManager _world = world ?? throw new ArgumentNullException(nameof(world));
@@ -77,6 +77,8 @@ namespace OpenConquer.GameServer.Handlers
                 return;
             }
 
+            int idx = new Random().Next(DefaultSpawnX.Length - 1);
+
             Character newChar = new()
             {
                 Name = name,
@@ -84,8 +86,8 @@ namespace OpenConquer.GameServer.Handlers
                 Mesh = (uint)packet.Model,
                 Hair = (ushort)packet.Model,
                 MapID = DefaultMapId,
-                X = DefaultSpawnX,
-                Y = DefaultSpawnY,
+                X = DefaultSpawnX[idx],
+                Y = DefaultSpawnY[idx],
                 Health = _experienceService.GetMaxHealth((byte)packet.Job, 1),
                 Mana = _experienceService.GetMaxMana((byte)packet.Job, 1)
             };

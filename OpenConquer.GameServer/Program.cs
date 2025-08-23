@@ -12,7 +12,9 @@ using OpenConquer.Infrastructure.Mapping;
 using OpenConquer.Infrastructure.Persistence.Context;
 using OpenConquer.Infrastructure.POCO;
 using OpenConquer.Infrastructure.Services;
+using OpenConquer.Protocol.Crypto;
 using OpenConquer.Protocol.Packets.Parsers;
+using OpenConquer.Protocol.Utilities;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
@@ -20,26 +22,34 @@ builder.Configuration.SetBasePath(AppContext.BaseDirectory).AddJsonFile("appsett
 
 builder.Services.Configure<NetworkSettings>(builder.Configuration.GetSection("Network"));
 
+builder.Services.AddDbContextFactory<DataContext>(opts => opts.UseMySql(builder.Configuration.GetConnectionString("Default"), new MySqlServerVersion(new Version(8, 0, 36))));
+
 MapsterConfig.RegisterMappings();
 
-builder.Services.AddDbContext<AccountDataContext>(opts => opts.UseMySql(builder.Configuration.GetConnectionString("Default"), new MySqlServerVersion(new Version(8, 0, 36))));
-builder.Services.AddDbContext<GameDataContext>(opts => opts.UseMySql(builder.Configuration.GetConnectionString("Default"), new MySqlServerVersion(new Version(8, 0, 36))));
+builder.Services.Scan(scan => scan.FromAssemblyOf<IPacketParser>().AddClasses(c => c.AssignableTo<IPacketParser>()).AsImplementedInterfaces().WithSingletonLifetime());
 
-builder.Services.AddScoped<ILevelStatService, LevelStatService>();
+builder.Services.AddSingleton<PacketParserRegistry>();
 
-builder.Services.Scan(scan => scan.FromAssemblyOf<IPacketParser>().AddClasses(classes => classes.AssignableTo<IPacketParser>()).AsImplementedInterfaces().WithSingletonLifetime());
-builder.Services.Scan(scan => scan.FromAssemblyOf<PacketDispatcher>().AddClasses(classes => classes.AssignableTo(typeof(IPacketHandler<>))).AsImplementedInterfaces().WithTransientLifetime());
+builder.Services.Scan(scan => scan.FromAssemblyOf<PacketDispatcher>().AddClasses(c => c.AssignableTo(typeof(IPacketHandler<>))).AsImplementedInterfaces().WithTransientLifetime());
+
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<ICharacterService, CharacterService>();
+
+builder.Services.AddSingleton<ILevelStatService, LevelStatService>();
+
+builder.Services.AddSingleton<UserManager>();
+builder.Services.AddSingleton<WorldManager>();
 
 builder.Services.AddSingleton<PacketDispatcher>();
-builder.Services.AddSingleton<WorldManager>();
+
 builder.Services.AddSingleton<ExperienceService>();
-builder.Services.AddSingleton<ConnectionQueue>();
 builder.Services.AddSingleton<IExperienceService>(sp => sp.GetRequiredService<ExperienceService>());
-
-
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ExperienceService>());
-builder.Services.AddHostedService<GameHandshakeService>();
+
+builder.Services.AddSingleton<ConnectionQueue>();
 builder.Services.AddHostedService<ConnectionWorker>();
+
+builder.Services.AddHostedService<GameHandshakeService>();
 
 IHost host = builder.Build();
 host.Run();

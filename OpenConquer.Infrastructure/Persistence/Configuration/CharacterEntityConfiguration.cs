@@ -13,6 +13,11 @@ namespace OpenConquer.Infrastructure.Persistence.Configuration
             builder.HasKey(c => c.UID);
             builder.Property(c => c.UID).HasColumnName("uid");
 
+            builder.Property(c => c.AccountUID).HasColumnName("account_uid").IsRequired();
+
+            builder.HasIndex(c => c.AccountUID).IsUnique().HasDatabaseName("ux_characters_account_uid");
+            builder.HasOne<AccountEntity>().WithOne(a => a.Character).HasForeignKey<CharacterEntity>(c => c.AccountUID).HasConstraintName("fk_characters_account");
+
             builder.Property(c => c.Name).HasColumnName("name").HasMaxLength(16).IsRequired();
             builder.Property(c => c.Spouse).HasColumnName("spouse").HasMaxLength(16).IsRequired();
             builder.Property(c => c.Mesh).HasColumnName("mesh");
@@ -22,7 +27,7 @@ namespace OpenConquer.Infrastructure.Persistence.Configuration
             builder.Property(c => c.CP).HasColumnName("cp");
             builder.Property(c => c.Experience).HasColumnName("experience");
             builder.Property(c => c.Level).HasColumnName("level");
-            builder.Property(c => c.Profession).HasColumnName("profession");
+            builder.Property(c => c.Profession).HasColumnName("profession").HasColumnType("tinyint unsigned").HasConversion<byte>().IsRequired();
             builder.Property(c => c.Metempsychosis).HasColumnName("metempsychosis");
             builder.Property(c => c.Title).HasColumnName("title");
 

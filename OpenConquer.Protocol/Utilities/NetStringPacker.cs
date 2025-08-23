@@ -1,4 +1,7 @@
-﻿using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace OpenConquer.Protocol.Utilities
 {
@@ -42,16 +45,16 @@ namespace OpenConquer.Protocol.Utilities
             return packer;
         }
 
-        public bool AddString(string value)
+        public NetStringPacker AddString(string value)
         {
             ArgumentNullException.ThrowIfNull(value);
             if (value.Length > 255)
             {
-                return false;
+                throw new ArgumentException("String length must be <= 255 bytes when encoded.", nameof(value));
             }
 
             _values.Add(value);
-            return true;
+            return this;
         }
 
         public bool GetString(int index, out string value)
@@ -71,7 +74,6 @@ namespace OpenConquer.Protocol.Utilities
             {
                 return string.Empty;
             }
-
             return _values[index];
         }
 
@@ -81,13 +83,11 @@ namespace OpenConquer.Protocol.Utilities
             {
                 return false;
             }
-
             _values[index] = value;
             return true;
         }
 
         public void Clear() => _values.Clear();
-
         public bool Contains(int index) => index >= 0 && index < _values.Count;
 
         public int Capacity
@@ -117,6 +117,8 @@ namespace OpenConquer.Protocol.Utilities
 
             return buffer;
         }
+
+        public byte[] Pack() => ToArray();
 
         public static implicit operator byte[](NetStringPacker packer) => packer.ToArray();
     }
