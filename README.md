@@ -69,7 +69,7 @@ OpenConquer.sln
 
 * \[✅] **OpenConquer.Protocol**: packet definitions, crypto (seed/XOR/RSA)
 * \[✅] **OpenConquer.Infrastructure**: TCP listener, pipelines, seed handshake → `Channel<Packet>`
-* \[✅] Protocol compliance tests (seed → response, login handshake)
+* \[✏️] Protocol compliance tests (seed → response, login handshake)
 
 ### Phase 2 – Account & Character Services
 
